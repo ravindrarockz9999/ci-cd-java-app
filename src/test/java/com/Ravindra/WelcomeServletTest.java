@@ -1,5 +1,5 @@
 
-package com.ravindra;
+package com.codekamikaze;
 
 import static org.junit.Assert.*;
 import org.junit.*;
