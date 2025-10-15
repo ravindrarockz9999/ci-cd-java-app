@@ -31,6 +31,6 @@ public class WelcomeServletTest {
     @Test
     public void testDoGet() throws Exception {
         servlet.doGet(request, response);
-        Mockito.verify(writer).println("<h1>Welcome to CodeKamikaze</h1>");
+        Mockito.verify(writer).println("<h1>Welcome to GithubActions</h1>");
     }
 }
