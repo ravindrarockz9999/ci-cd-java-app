@@ -4,7 +4,7 @@
          version="3.0">
     <servlet>
         <servlet-name>WelcomeServlet</servlet-name>
-        <servlet-class>com.Ravindra.WelcomeServlet</servlet-class>
+        <servlet-class>com.ravindra.WelcomeServlet</servlet-class>
     </servlet>
     <servlet-mapping>
         <servlet-name>WelcomeServlet</servlet-name>
