@@ -163,3 +163,40 @@ jobs:
         with:
           name: malware-scan-results
           path: malware-scan-results.txt
+
+          
+  image-build:
+    runs-on: ubuntu-latest
+    env:
+      DOCKER_REPO: ravindra9999/ci-cd
+      DOCKER_TAG: latest
+    needs: malware-scan
+    steps:
+      - uses: actions/checkout@v3
+      - name: Download WAR Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: java-app-war
+          path: target 
+      - name: Build Docker image
+        run: |
+          docker build -t ravindra9999/ci-cd:latest .
+          docker images
+
+      - name: Install Trivy
+        run: |
+          sudo apt-get update
+          sudo apt-get install wget apt-transport-https gnupg lsb-release -y
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | sudo tee -a /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update
+          sudo apt-get install trivy -y
+          docker images
+
+      - name: Trivy Docker Scan
+        run: trivy image $DOCKER_REPO:$DOCKER_TAG
+
+      - name: Docker Login
+        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+      - name: Docker Push
+        run: docker push $DOCKER_REPO:latest
