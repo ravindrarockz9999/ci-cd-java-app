@@ -204,6 +204,9 @@ jobs:
     - name: Trivy Docker Scan
       run: trivy image $IMAGE
 
+    - name: Verify Docker Auth
+      run: cat ~/.docker/config.json
+
     - name: Push image to Artifact Registry
       run: docker push $IMAGE
       
