@@ -17,3 +17,6 @@ spec:
         image: gcr.io/mythical-bazaar-470812-n3/cicd-java:latest
         ports:
         - containerPort: 8080
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
