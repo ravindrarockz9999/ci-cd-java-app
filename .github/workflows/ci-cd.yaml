@@ -201,55 +201,38 @@ jobs:
       - name: Docker Push
         run: docker push $DOCKER_REPO:latest
         
-  deploy:
+  gke-deploy:
     runs-on: ubuntu-latest
-    needs: image-build   
-  
-    steps:
-      - name: Install ArgoCD CLI
-        run: |
-          curl -sLO https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
-          chmod +x argocd-linux-amd64
-          sudo mv argocd-linux-amd64 /usr/local/bin/argocd
-  
-      - name: ArgoCD Login and Deploy
-        env:
-          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
-          ARGOCD_USERNAME: ${{ secrets.ARGOCD_USERNAME }}
-          ARGOCD_PASSWORD: ${{ secrets.ARGOCD_PASSWORD }}
-        run: |
-          argocd login $ARGOCD_SERVER --username $ARGOCD_USERNAME --password $ARGOCD_PASSWORD --insecure
-          argocd app sync app-java-1
-          argocd app wait app-java-1 --health --operation
-  dast:
-    runs-on: ubuntu-latest
-    needs: deploy
+    needs: image-build
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-  
-      - name: Set up Java
-        uses: actions/setup-java@v3
+
+      - name: Set up gcloud CLI
+        uses: google-github-actions/setup-gcloud@v1
         with:
-          java-version: '17'
-          distribution: 'temurin'
-  
-      - name: Install and Run OWASP ZAP CLI
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          export_default_credentials: true
+
+      - name: Configure Docker to use gcloud
+        run: gcloud auth configure-docker
+
+      - name: Tag and Push image to GCR
+        env:
+          IMAGE: gcr.io/${{ secrets.GCP_PROJECT_ID }}/cicd-java:latest
         run: |
-          sudo apt update
-          sudo apt install wget -y
-          sudo mkdir -p $HOME/zap
-          cd $HOME/zap
-          sudo wget https://github.com/zaproxy/zaproxy/releases/download/v2.16.0/ZAP_2_16_0_unix.sh
-          sudo chmod +x ZAP_2_16_0_unix.sh
-          sudo ./ZAP_2_16_0_unix.sh -q -dir $HOME/zap/zaproxy
-          sudo mkdir -p $HOME/zap/zaproxy/owasp-zap-report
-          sudo $HOME/zap/zaproxy/zap.sh -cmd -quickurl http://35.232.177.115:443/welcome-message-1.0-SNAPSHOT/welcome \
-            -quickout $HOME/zap/zaproxy/owasp-zap-report/report.html \
-            -silent
-  
-      - name: Upload ZAP Report
-        uses: actions/upload-artifact@v4
-        with:
-          name: zap-report
-          path: /home/runner/zap/zaproxy/owasp-zap-report/report.html
+          docker tag ravindra9999/ci-cd:latest $IMAGE
+          docker push $IMAGE
+
+      - name: Get GKE credentials
+        run: |
+          gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER_NAME }} --zone ${{ secrets.GKE_ZONE }}
+
+      - name: Deploy to GKE
+        run: |
+          kubectl apply -f kubernetes/deployment.yaml
+          kubectl apply -f kubernetes/Service.yaml
+
+      #- name: Verify Deployment
+      # run: kubectl get all
