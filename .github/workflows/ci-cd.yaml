@@ -222,7 +222,7 @@ jobs:
     - name: Configure kubectl
       run: |
         gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER_NAME }} \
-          --region ${{ secrets.GKE_REGION }} \
+          --zone ${{ secrets.GKE_ZONE }} \
           --project ${{ secrets.GCP_PROJECT_ID }}
 
     - name: Deploy to GKE
