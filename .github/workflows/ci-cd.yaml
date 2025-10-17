@@ -218,7 +218,6 @@ jobs:
         curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
         chmod +x kubectl
         sudo mv kubectl /usr/local/bin/
-        kubectl version --client
 
     - name: Configure Docker to use gcloud
       run: gcloud auth configure-docker
@@ -240,7 +239,4 @@ jobs:
     - name: Deploy to GKE
       run: |
         kubectl apply -f kubernetes/deployment.yaml
-        kubectl apply -f kubernetes/Service.yaml
-
-   # - name: Verify Deployment
-   #   run: kubectl rollout status deployment/java-app     
+        kubectl apply -f kubernetes/Service.yaml 
