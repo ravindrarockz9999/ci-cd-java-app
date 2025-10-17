@@ -7,21 +7,8 @@ on:
     branches: [ main ]
 
 jobs:
-  install:
-    runs-on: self-hosted
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
   build:
-    runs-on: self-hosted
-    needs: install
+    runs-on: [self-hosted, linux, x64]
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -45,17 +32,11 @@ jobs:
           path: target/welcome-message-1.0-SNAPSHOT.war
 
   test:
-    runs-on: self-hosted
+    runs-on: [self-hosted, linux, x64]
     needs: build
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'temurin'
-          java-version: '17'
 
       - name: Build and Run Tests with Maven
         run: mvn clean verify
@@ -72,36 +53,33 @@ jobs:
 
   sonar-scan:
     name: sonar-scan
-    runs-on: self-hosted
+    runs-on: [self-hosted, linux, x64]
     needs: test
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: 17
-          distribution: 'zulu'
+
       - name: Cache SonarQube packages
         uses: actions/cache@v4
         with:
           path: ~/.sonar/cache
           key: ${{ runner.os }}-sonar
           restore-keys: ${{ runner.os }}-sonar
+          
       - name: Cache Maven packages
         uses: actions/cache@v4
         with:
           path: ~/.m2
           key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-m2
+          
       - name: Download JaCoCo report
         uses: actions/download-artifact@v4
         with:
           name: jacoco-report
           path: jacoco-report
-      - name: List downloaded JaCoCo report contents
-        run: ls -R jacoco-report
+          
       - name: Build and analyze
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -112,25 +90,19 @@ jobs:
             -Dsonar.tests=src/test/java \
             -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
 
-  semgrep:
-    runs-on: self-hosted
+  security-scans:
+    runs-on: [self-hosted, linux, x64]
     needs: sonar-scan
     steps:
-     - uses: actions/checkout@v3
-
-     - name: Run Semgrep
-       uses: returntocorp/semgrep-action@v1
-       with:
-        semgrep_version: 1.76.0
-        config: auto
-
-  dependency-check-trivy-scan:
-    runs-on: self-hosted
-    needs: semgrep
-    steps:
       - uses: actions/checkout@v3
-  
-      - name: Install Trivy CLI (v0.38.3)
+
+      - name: Run Semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          semgrep_version: 1.76.0
+          config: auto
+
+      - name: Install Trivy CLI
         run: |
           sudo apt update
           sudo apt install -y wget apt-transport-https
@@ -138,94 +110,77 @@ jobs:
           sudo dpkg -i trivy_0.38.3_Linux-64bit.deb
           trivy --version
 
-      - name: Run Trivy Scan
+      - name: Run Trivy Filesystem Scan
         run: |
           trivy fs . --format table --severity HIGH,CRITICAL
 
-  malware-scan:
-    runs-on: self-hosted
-    needs: dependency-check-trivy-scan
-    steps:
-      - uses: actions/checkout@v3
-  
-      - name: Install ClamAV and run scan
+      - name: Install ClamAV and run malware scan
         run: |
           sudo apt-get update
           sudo apt-get install -y clamav
           sudo systemctl stop clamav-freshclam 
           sudo freshclam
-          sudo freshclam 
           clamscan -r . | tee malware-scan-results.txt
-  
-      - name: Upload scan results
+
+      - name: Upload malware scan results
         uses: actions/upload-artifact@v4
         with:
           name: malware-scan-results
           path: malware-scan-results.txt
 
   image-build:
-   runs-on: self-hosted
-   env:
-    DOCKER_REPO: ravindra9999/ci-cd
-    DOCKER_TAG: latest
-   needs: malware-scan
-   steps:
-    - uses: actions/checkout@v3
+    runs-on: [self-hosted, linux, x64]
+    env:
+      DOCKER_REPO: ravindra9999/ci-cd
+      DOCKER_TAG: latest
+    needs: security-scans
+    steps:
+      - uses: actions/checkout@v3
 
-    - name: Download WAR Artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: java-app-war
-        path: target
+      - name: Download WAR Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: java-app-war
+          path: target
 
-    - name: Build Docker image
-      run: |
-        docker build -t $DOCKER_REPO:$DOCKER_TAG .
-        docker images
+      - name: Build Docker image
+        run: |
+          docker build -t $DOCKER_REPO:$DOCKER_TAG .
+          docker images
 
-    - name: Install Trivy
-      run: |
-        sudo apt-get update
-        sudo apt-get install wget apt-transport-https gnupg lsb-release -y
-        wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
-        echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | sudo tee -a /etc/apt/sources.list.d/trivy.list
-        sudo apt-get update
-        sudo apt-get install trivy -y
-        docker images
+      - name: Trivy Docker Image Scan
+        run: trivy image $DOCKER_REPO:$DOCKER_TAG
 
-    - name: Trivy Docker Scan
-      run: trivy image $DOCKER_REPO:$DOCKER_TAG
+      - name: Docker Login
+        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
-    - name: Docker Login
-      run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
-
-    - name: Docker Push
-      run: docker push $DOCKER_REPO:$DOCKER_TAG
+      - name: Docker Push
+        run: docker push $DOCKER_REPO:$DOCKER_TAG
       
   deploy-to-gke:
-   runs-on: self-hosted
-   needs: image-build
-   steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+    runs-on: [self-hosted, linux, x64]
+    needs: image-build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    - name: Authenticate to Google Cloud
-      uses: google-github-actions/auth@v1
-      with:
-        credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-    - name: Set up gcloud CLI
-      uses: google-github-actions/setup-gcloud@v1
-      with:
-        project_id: ${{ secrets.GCP_PROJECT_ID }}
+      - name: Set up gcloud CLI
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
 
-    - name: Configure kubectl
-      run: |
-        gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER_NAME }} \
-          --zone ${{ secrets.GKE_ZONE }} \
-          --project ${{ secrets.GCP_PROJECT_ID }}
+      - name: Configure kubectl
+        run: |
+          gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER_NAME }} \
+            --zone ${{ secrets.GKE_ZONE }} \
+            --project ${{ secrets.GCP_PROJECT_ID }}
 
-    - name: Deploy to GKE
-      run: |
-        kubectl apply -f kubernetes/deployment.yaml
-        kubectl apply -f kubernetes/Service.yaml
+      - name: Deploy to GKE
+        run: |
+          kubectl apply -f kubernetes/deployment.yaml
+          kubectl apply -f kubernetes/Service.yaml
