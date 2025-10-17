@@ -116,14 +116,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: sonar-scan
     steps:
-      - uses: actions/checkout@v3
-      - name: Install Semgrep
-        run: |
-          sudo snap install semgrep --classic
-      - name: Run Semgrep
-        uses: returntocorp/semgrep-action@v1
-        with:
-          config: auto
+     - uses: actions/checkout@v3
+
+     - name: Run Semgrep
+       uses: returntocorp/semgrep-action@v1
+       with:
+        semgrep_version: 1.76.0
+        config: auto
 
   dependency-check-trivy-scan:
     runs-on: ubuntu-latest
