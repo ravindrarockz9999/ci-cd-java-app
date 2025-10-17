@@ -8,7 +8,7 @@ on:
 
 jobs:
   install:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -20,7 +20,7 @@ jobs:
           java-version: '17'
 
   build:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: install
     steps:
       - name: Checkout code
@@ -45,7 +45,7 @@ jobs:
           path: target/welcome-message-1.0-SNAPSHOT.war
 
   test:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: build
     steps:
       - name: Checkout code
@@ -72,7 +72,7 @@ jobs:
 
   sonar-scan:
     name: sonar-scan
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: test
     steps:
       - uses: actions/checkout@v4
@@ -113,7 +113,7 @@ jobs:
             -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
 
   semgrep:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: sonar-scan
     steps:
      - uses: actions/checkout@v3
@@ -125,7 +125,7 @@ jobs:
         config: auto
 
   dependency-check-trivy-scan:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: semgrep
     steps:
       - uses: actions/checkout@v3
@@ -143,7 +143,7 @@ jobs:
           trivy fs . --format table --severity HIGH,CRITICAL
 
   malware-scan:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: dependency-check-trivy-scan
     steps:
       - uses: actions/checkout@v3
@@ -164,7 +164,7 @@ jobs:
           path: malware-scan-results.txt
 
   image-build:
-   runs-on: ubuntu-latest
+   runs-on: self-hosted
    env:
     DOCKER_REPO: ravindra9999/ci-cd
     DOCKER_TAG: latest
@@ -203,7 +203,7 @@ jobs:
       run: docker push $DOCKER_REPO:$DOCKER_TAG
       
   deploy-to-gke:
-   runs-on: ubuntu-latest
+   runs-on: self-hosted
    needs: image-build
    steps:
     - name: Checkout code
